@@ -1,23 +1,21 @@
 package tiny
 
 import (
-	"fmt"
 	"net/http"
 )
 
-type HandleFunc func(w http.ResponseWriter, r *http.Request)
+type HandleFunc func(ctx *Context)
 
 type Engine struct {
-	router map[string]HandleFunc
+	router *router
 }
 
 func New() *Engine {
-	return &Engine{router: make(map[string]HandleFunc)}
+	return &Engine{router: newRouter()}
 }
 
 func (e *Engine) addRoute(method string, pattern string, handler HandleFunc) {
-	key := method + "-" + pattern
-	e.router[key] = handler
+	e.router.addRoute(method, pattern, handler)
 }
 
 func (e *Engine) GET(pattern string, handler HandleFunc) {
@@ -33,10 +31,6 @@ func (e *Engine) Run(addr string) (err error) {
 }
 
 func (e *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	key := req.Method + "-" + req.URL.Path
-	if handler, ok := e.router[key]; ok {
-		handler(w, req)
-	} else {
-		_, _ = fmt.Fprintf(w, "404 NOT FOUND: %s\n", req.URL)
-	}
+	c := newContext(w, req)
+	e.router.handle(c)
 }
