@@ -11,9 +11,10 @@ type H map[string]interface{}
 type Context struct {
 	Writer     http.ResponseWriter
 	Req        *http.Request
-	Path       string
-	Method     string
-	StatusCode int
+	Path       string            // 路径
+	Method     string            // 方法
+	Params     map[string]string // 参数
+	StatusCode int               // 状态码
 }
 
 func newContext(w http.ResponseWriter, req *http.Request) *Context {
@@ -23,6 +24,11 @@ func newContext(w http.ResponseWriter, req *http.Request) *Context {
 		Path:   req.URL.Path,
 		Method: req.Method,
 	}
+}
+
+func (c *Context) Param(key string) string {
+	value, _ := c.Params[key]
+	return value
 }
 
 // PostForm 获取表单信息
