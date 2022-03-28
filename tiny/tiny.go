@@ -3,6 +3,7 @@ package tiny
 import (
 	"log"
 	"net/http"
+	"strings"
 )
 
 type HandleFunc func(ctx *Context)
@@ -48,7 +49,16 @@ func (e *Engine) Run(addr string) (err error) {
 }
 
 func (e *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	var middlewares []HandleFunc
+	// 将对应group中middleware置于context中
+	for _, group := range e.groups {
+		if strings.HasPrefix(req.URL.Path, group.prefix) {
+			middlewares = append(middlewares, group.middlewares...)
+		}
+	}
+	// 中间件置为handler
 	c := newContext(w, req)
+	c.handlers = middlewares
 	e.router.handle(c)
 }
 
@@ -72,4 +82,8 @@ func (g *RouterGroup) GET(pattern string, handler HandleFunc) {
 
 func (g *RouterGroup) POST(pattern string, handler HandleFunc) {
 	g.addRoute("POST", pattern, handler)
+}
+
+func (g *RouterGroup) Use(middlewares ...HandleFunc) {
+	g.middlewares = append(g.middlewares, middlewares...)
 }
