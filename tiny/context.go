@@ -15,8 +15,9 @@ type Context struct {
 	Method     string            // 方法
 	Params     map[string]string // 参数
 	StatusCode int               // 状态码
-	handlers   []HandleFunc      // 中间件
+	handlers   []HandlerFunc     // 中间件
 	index      int
+	engine     *Engine // 引擎
 }
 
 func newContext(w http.ResponseWriter, req *http.Request) *Context {
@@ -91,8 +92,10 @@ func (c *Context) Data(code int, data []byte) {
 }
 
 // HTML 写入HTML
-func (c *Context) HTML(code int, html string) {
+func (c *Context) HTML(code int, name string, data interface{}) {
 	c.SetHeader("Content-Type", "text/html")
 	c.Status(code)
-	_, _ = c.Writer.Write([]byte(html))
+	if err := c.engine.htmlTemplates.ExecuteTemplate(c.Writer, name, data); err != nil {
+		c.Fail(500, err.Error())
+	}
 }

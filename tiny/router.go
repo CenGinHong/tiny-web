@@ -8,17 +8,17 @@ import (
 // 路由对象
 type router struct {
 	roots    map[string]*node
-	handlers map[string]HandleFunc
+	handlers map[string]HandlerFunc
 }
 
 func newRouter() *router {
 	return &router{
 		roots:    make(map[string]*node),
-		handlers: make(map[string]HandleFunc),
+		handlers: make(map[string]HandlerFunc),
 	}
 }
 
-func (r *router) addRoute(method string, pattern string, handler HandleFunc) {
+func (r *router) addRoute(method string, pattern string, handler HandlerFunc) {
 	parts := parsePattern(pattern)
 	key := method + "-" + pattern
 	_, ok := r.roots[method]

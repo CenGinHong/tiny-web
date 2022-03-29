@@ -1,17 +1,21 @@
 package tiny
 
 import (
+	"html/template"
 	"log"
 	"net/http"
+	"path"
 	"strings"
 )
 
-type HandleFunc func(ctx *Context)
+type HandlerFunc func(ctx *Context)
 
 type Engine struct {
 	*RouterGroup
-	router *router        // 管理路由前缀树
-	groups []*RouterGroup // 管理所有RouterGroup
+	router        *router            // 管理路由前缀树
+	groups        []*RouterGroup     // 管理所有RouterGroup
+	htmlTemplates *template.Template // 将所有模板加载进内存
+	funcMap       template.FuncMap   // 自定义的模板渲染函数
 }
 
 func New() *Engine {
@@ -32,15 +36,15 @@ func (g *RouterGroup) Group(prefix string) *RouterGroup {
 	return newGroup
 }
 
-func (e *Engine) addRoute(method string, pattern string, handler HandleFunc) {
+func (e *Engine) addRoute(method string, pattern string, handler HandlerFunc) {
 	e.router.addRoute(method, pattern, handler)
 }
 
-func (e *Engine) GET(pattern string, handler HandleFunc) {
+func (e *Engine) GET(pattern string, handler HandlerFunc) {
 	e.addRoute("GET", pattern, handler)
 }
 
-func (e *Engine) POST(pattern string, handler HandleFunc) {
+func (e *Engine) POST(pattern string, handler HandlerFunc) {
 	e.addRoute("POST", pattern, handler)
 }
 
@@ -49,7 +53,7 @@ func (e *Engine) Run(addr string) (err error) {
 }
 
 func (e *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	var middlewares []HandleFunc
+	var middlewares []HandlerFunc
 	// 将对应group中middleware置于context中
 	for _, group := range e.groups {
 		if strings.HasPrefix(req.URL.Path, group.prefix) {
@@ -58,32 +62,67 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 	// 中间件置为handler
 	c := newContext(w, req)
+	c.engine = e
 	c.handlers = middlewares
 	e.router.handle(c)
 }
 
-// RouterGroup 路由组，使用自底向上的方式进行连接
-type RouterGroup struct {
-	prefix      string       // 前缀
-	middlewares []HandleFunc // 应用在此上的中间件
-	parent      *RouterGroup // 父级路由组
-	engine      *Engine      // 所有的RouterGroup均持有同一个engine
+func (e *Engine) SetFuncMap(funcMap template.FuncMap) {
+	e.funcMap = funcMap
 }
 
-func (g *RouterGroup) addRoute(method string, comp string, handler HandleFunc) {
+func (e *Engine) LoadHTMLGlob(pattern string) {
+	e.htmlTemplates = template.Must(template.New("").Funcs(e.funcMap).ParseGlob(pattern))
+}
+
+// RouterGroup 路由组，使用自底向上的方式进行连接
+type RouterGroup struct {
+	prefix      string        // 前缀
+	middlewares []HandlerFunc // 应用在此上的中间件
+	parent      *RouterGroup  // 父级路由组
+	engine      *Engine       // 所有的RouterGroup均持有同一个engine
+}
+
+func (g *RouterGroup) addRoute(method string, comp string, handler HandlerFunc) {
 	pattern := g.prefix + comp
 	log.Printf("Route %4s -%s", method, pattern)
 	g.engine.router.addRoute(method, pattern, handler)
 }
 
-func (g *RouterGroup) GET(pattern string, handler HandleFunc) {
+func (g *RouterGroup) GET(pattern string, handler HandlerFunc) {
 	g.addRoute("GET", pattern, handler)
 }
 
-func (g *RouterGroup) POST(pattern string, handler HandleFunc) {
+func (g *RouterGroup) POST(pattern string, handler HandlerFunc) {
 	g.addRoute("POST", pattern, handler)
 }
 
-func (g *RouterGroup) Use(middlewares ...HandleFunc) {
+func (g *RouterGroup) Use(middlewares ...HandlerFunc) {
 	g.middlewares = append(g.middlewares, middlewares...)
+}
+
+func (g *RouterGroup) createStaticHandler(relativePath string, fs http.FileSystem) HandlerFunc {
+	// 拼接路径 group.prefix/assets
+	absolutePath := path.Join(g.prefix, relativePath)
+	// fileServer要把前面的path去掉，需要映射到文件服务器的位置。
+	// 即前面有可能是localhost:xxx/xxxx/assets/*filepath，其中filepath都放在文件服务器下，故需要把xxxx/assets去掉
+	fileServer := http.StripPrefix(absolutePath, http.FileServer(fs))
+	return func(ctx *Context) {
+		// file是文件地址，例如js/geektutu.js
+		file := ctx.Param("filepath")
+		// 打开文件
+		if _, err := fs.Open(file); err != nil {
+			ctx.Status(http.StatusNotFound)
+			return
+		}
+		fileServer.ServeHTTP(ctx.Writer, ctx.Req)
+	}
+}
+
+// Static 将磁盘上某个文件夹root映射到relativePath
+func (g *RouterGroup) Static(relativePath string, root string) {
+	handler := g.createStaticHandler(relativePath, http.Dir(root))
+	urlPattern := path.Join(relativePath, "/*filepath")
+	// 加入路由中
+	g.GET(urlPattern, handler)
 }
