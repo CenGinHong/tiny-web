@@ -25,6 +25,12 @@ func New() *Engine {
 	return e
 }
 
+func Default() *Engine {
+	e := New()
+	e.Use(Logger(), Recovery())
+	return e
+}
+
 func (g *RouterGroup) Group(prefix string) *RouterGroup {
 	e := g.engine
 	newGroup := &RouterGroup{
@@ -64,6 +70,7 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	c := newContext(w, req)
 	c.engine = e
 	c.handlers = middlewares
+	// 主handler在handle函数中添加
 	e.router.handle(c)
 }
 
@@ -95,6 +102,14 @@ func (g *RouterGroup) GET(pattern string, handler HandlerFunc) {
 
 func (g *RouterGroup) POST(pattern string, handler HandlerFunc) {
 	g.addRoute("POST", pattern, handler)
+}
+
+func (g *RouterGroup) PUT(pattern string, handler HandlerFunc) {
+	g.addRoute("PUT", pattern, handler)
+}
+
+func (g *RouterGroup) DELETE(pattern string, handler HandlerFunc) {
+	g.addRoute("DELETE", pattern, handler)
 }
 
 func (g *RouterGroup) Use(middlewares ...HandlerFunc) {
