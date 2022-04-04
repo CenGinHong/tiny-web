@@ -69,6 +69,7 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// 中间件置为handler
 	c := newContext(w, req)
 	c.engine = e
+	// 中间件如果不调用next，就说明没有后置结果需要处理。如果有next，会在next的循环退出执行后端部分
 	c.handlers = middlewares
 	// 主handler在handle函数中添加
 	e.router.handle(c)
