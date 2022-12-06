@@ -1,3 +1,3 @@
-module github.com/CenGinHong/TinyWeb
+module github.com/CenGinHong/tiny-web
 
 go 1.17
